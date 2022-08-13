@@ -1,5 +1,8 @@
-use std::{net::{TcpListener, TcpStream}, io::Read, fs::File};
+use core::time;
+use std::{net::{TcpListener, TcpStream}, io::Read, fs::File, thread};
 use std::io::Write;
+
+use crate::ThreadPool;
 
 pub fn router() {
     let lis = TcpListener::bind("127.0.0.1:7878");
@@ -11,10 +14,13 @@ pub fn router() {
         Err(_) => panic!("Cannot bind to server"),
     };
 
+    let pool = ThreadPool::new(4);
     for stream in lis.incoming() {
         match stream {
             Ok(stream) => {
-                handle_connection(stream);
+                pool.execute(|| {
+                    handle_connection(stream)
+                });
                 println!("connection established");
             }
             Err(e) => {
@@ -24,31 +30,40 @@ pub fn router() {
     }
 }
 
+
 fn handle_connection(mut stream: TcpStream) {
     let mut buffer = [0;1024];
     stream.read(&mut buffer[..]).unwrap();
 
-    let get = b"GET / HTTP/1.1\r\n";
+    let (status, filename) = routing(&buffer);
 
-    if buffer.starts_with(get) {
-        let mut file = File::open("index.html").unwrap();
-        let mut html = String::new();
-        file.read_to_string(&mut html).unwrap();
-
-        let mut f = File::open("index.css").unwrap();
-        let mut css = String::new();
-        f.read_to_string(&mut css).unwrap();
-
-        let res = format!("HTTP/1.0 200 OK\r\n\r\n {} {}", html, css);
-
-        stream.write(res.as_bytes()).unwrap();
-        stream.flush().unwrap();
-    } else {
-        let res = "HTTP/1.0 200 OK\r\n\r\n";
-
-        stream.write(res.as_bytes()).unwrap();
-        stream.flush().unwrap();
-    }
+    response(&mut stream, status, filename);
 
     println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
+}
+
+
+fn routing(buffer: &[u8; 1024]) -> (&str, &str) {
+    let get = b"GET / HTTP/1.1\r\n";
+    let sleep = b"GET /sleep HTTP/1.1\r\n";
+
+    if buffer.starts_with(get) {
+        ("HTTP/1.1 200 OK\r\n\r\n", "static/index.html")
+    } else if buffer.starts_with(sleep){
+        thread::sleep(time::Duration::from_secs(7));
+        ("HTTP/1.1 200 OK\r\n\r\n", "static/sleep.html")
+    }else {
+        ("HTTP/1.1 404 Not found\r\n\r\n", "static/404.html")
+    }
+}
+
+fn response(stream: &mut TcpStream, status: &str, filename: &str) {
+    let mut file = File::open(filename).unwrap();
+    let mut html = String::new();
+    file.read_to_string(&mut html).unwrap();
+
+    let res = format!("{} {}", status, html);
+
+    stream.write(res.as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
