@@ -15,13 +15,13 @@ pub fn router() {
     };
 
     let pool = ThreadPool::new(4);
-    for stream in lis.incoming() {
+    for stream in lis.incoming().take(4) {
         match stream {
             Ok(stream) => {
                 pool.execute(|| {
                     handle_connection(stream)
                 });
-                println!("connection established");
+                println!("connect stream...");
             }
             Err(e) => {
                 panic!("Error stream: {}", e)
@@ -32,14 +32,12 @@ pub fn router() {
 
 
 fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0;1024];
+    let mut buffer = [0; 1024];
     stream.read(&mut buffer[..]).unwrap();
 
     let (status, filename) = routing(&buffer);
-
     response(&mut stream, status, filename);
-
-    println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
+    // println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
 }
 
 
