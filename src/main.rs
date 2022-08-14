@@ -3,8 +3,10 @@ extern crate network;
 use network::ThreadPool;
 
 mod router;
+mod prime_number;
 
 fn main() {
-    // router listen
-    router::router_main::router();
+    // router::router_main::router();
+
+    prime_number::prime::main();
 }
